@@ -3,7 +3,7 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class ListingsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private prisma: PrismaService, private searchService: any) {}
 
   async findAll(skip = 0, take = 10) {
     return this.prisma.listing.findMany({
@@ -81,13 +81,22 @@ export class ListingsService {
 
   async create(providerId: string, data: Record<string, any>) {
     const payload = { ...data, providerId };
-    return this.prisma.listing.create({
+    const created = await this.prisma.listing.create({
       data: payload,
       include: {
         category: true,
         provider: true,
       },
     });
+
+    // Index in Algolia (best-effort)
+    try {
+      await this.searchService.indexListing(created);
+    } catch (err) {
+      // ignore
+    }
+
+    return created;
   }
 
   async update(id: string, requesterId: string, data: Record<string, any>) {
@@ -97,13 +106,19 @@ export class ListingsService {
       throw new ForbiddenException('Not allowed to update this listing');
     }
 
-    return this.prisma.listing.update({
+    const updated = await this.prisma.listing.update({
       where: { id },
       data,
       include: {
         category: true,
       },
     });
+
+    try {
+      await this.searchService.indexListing(updated);
+    } catch (err) {}
+
+    return updated;
   }
 
   async delete(id: string, requesterId: string) {
@@ -112,7 +127,11 @@ export class ListingsService {
     if (listing.providerId !== requesterId) {
       throw new ForbiddenException('Not allowed to delete this listing');
     }
-    return this.prisma.listing.delete({ where: { id } });
+    const deleted = await this.prisma.listing.delete({ where: { id } });
+    try {
+      await this.searchService.removeListing(id);
+    } catch (err) {}
+    return deleted;
   }
 
   async search(query: string, skip = 0, take = 10) {
