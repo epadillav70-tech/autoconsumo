@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
@@ -79,9 +79,10 @@ export class ListingsService {
     });
   }
 
-  async create(data: Record<string, any>) {
+  async create(providerId: string, data: Record<string, any>) {
+    const payload = { ...data, providerId };
     return this.prisma.listing.create({
-      data,
+      data: payload,
       include: {
         category: true,
         provider: true,
@@ -89,7 +90,13 @@ export class ListingsService {
     });
   }
 
-  async update(id: string, data: Record<string, any>) {
+  async update(id: string, requesterId: string, data: Record<string, any>) {
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+    if (!listing) throw new NotFoundException('Listing not found');
+    if (listing.providerId !== requesterId) {
+      throw new ForbiddenException('Not allowed to update this listing');
+    }
+
     return this.prisma.listing.update({
       where: { id },
       data,
@@ -99,10 +106,13 @@ export class ListingsService {
     });
   }
 
-  async delete(id: string) {
-    return this.prisma.listing.delete({
-      where: { id },
-    });
+  async delete(id: string, requesterId: string) {
+    const listing = await this.prisma.listing.findUnique({ where: { id } });
+    if (!listing) throw new NotFoundException('Listing not found');
+    if (listing.providerId !== requesterId) {
+      throw new ForbiddenException('Not allowed to delete this listing');
+    }
+    return this.prisma.listing.delete({ where: { id } });
   }
 
   async search(query: string, skip = 0, take = 10) {

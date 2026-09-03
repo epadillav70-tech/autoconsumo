@@ -1,5 +1,8 @@
-import { Controller, Get, Post, Patch, Delete, Param, Body, Query } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Param, Body, Query, UseGuards, Req, ForbiddenException } from '@nestjs/common';
 import { ListingsService } from './listings.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/roles.decorator';
 
 @Controller('listings')
 export class ListingsController {
@@ -29,18 +32,24 @@ export class ListingsController {
     return this.listingsService.findById(id);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   @Post()
-  create(@Body() createListingDto: Record<string, any>) {
-    return this.listingsService.create(createListingDto);
+  create(@Body() createListingDto: Record<string, any>, @Req() req: any) {
+    return this.listingsService.create(req.user.id, createListingDto);
   }
 
-  @Patch(':id')
-  update(@Param('id') id: string, @Body() updateListingDto: Record<string, any>) {
-    return this.listingsService.update(id, updateListingDto);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
+  @Put(':id')
+  update(@Param('id') id: string, @Body() updateListingDto: Record<string, any>, @Req() req: any) {
+    return this.listingsService.update(id, req.user.id, updateListingDto);
   }
 
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('PROVIDER', 'ADMIN')
   @Delete(':id')
-  delete(@Param('id') id: string) {
-    return this.listingsService.delete(id);
+  delete(@Param('id') id: string, @Req() req: any) {
+    return this.listingsService.delete(id, req.user.id);
   }
 }
