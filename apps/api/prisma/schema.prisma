@@ -1,0 +1,328 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Enums
+enum UserRole {
+  ADMIN
+  PROVIDER
+  CONSUMER
+}
+
+enum ListingStatus {
+  ACTIVE
+  INACTIVE
+  ARCHIVED
+  PENDING
+}
+
+enum ReviewType {
+  PROVIDER
+  CONSUMER
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+}
+
+enum ReportStatus {
+  OPEN
+  INVESTIGATING
+  RESOLVED
+  DISMISSED
+}
+
+enum ReportType {
+  INAPPROPRIATE_CONTENT
+  FRAUD
+  ABUSE
+  OTHER
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum PlanType {
+  FREE
+  BASIC
+  PROFESSIONAL
+  ENTERPRISE
+}
+
+// Models
+model User {
+  id                    String      @id @default(cuid())
+  email                 String      @unique
+  password              String
+  firstName             String?
+  lastName              String?
+  phoneNumber           String?
+  avatar                String?
+  bio                   String?
+  role                  UserRole    @default(CONSUMER)
+  isEmailVerified       Boolean     @default(false)
+  isPhoneVerified       Boolean     @default(false)
+  isActive              Boolean     @default(true)
+  averageRating         Float       @default(0)
+  totalReviews          Int         @default(0)
+  responseTime          Int?
+  successRate           Float       @default(0)
+  
+  // Relations
+  listings              Listing[]
+  reviews               Review[]
+  bookingsAsProvider    Booking[]   @relation("BookingProvider")
+  bookingsAsConsumer    Booking[]   @relation("BookingConsumer")
+  sentMessages          Message[]   @relation("SentMessages")
+  receivedMessages      Message[]   @relation("ReceivedMessages")
+  reportsCreated        Report[]    @relation("ReportCreator")
+  reportsAbout          Report[]    @relation("ReportedUser")
+  transactions          Transaction[]
+  plan                  Plan?
+  planId                String?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+model Category {
+  id                    String      @id @default(cuid())
+  name                  String      @unique
+  description           String?
+  icon                  String?
+  slug                  String      @unique
+  order                 Int         @default(0)
+  isActive              Boolean     @default(true)
+
+  listings              Listing[]
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([slug])
+  @@index([isActive])
+}
+
+model Listing {
+  id                    String      @id @default(cuid())
+  title                 String
+  description           String
+  categoryId            String
+  category              Category    @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  providerId            String
+  provider              User        @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  
+  status                ListingStatus @default(ACTIVE)
+  price                 Float
+  currency              String      @default("EUR")
+  location              String?
+  latitude              Float?
+  longitude             Float?
+  
+  averageRating         Float       @default(0)
+  totalReviews          Int         @default(0)
+  viewCount             Int         @default(0)
+  
+  media                 Media[]
+  bookings              Booking[]
+  reviews               Review[]
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([categoryId])
+  @@index([providerId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Media {
+  id                    String      @id @default(cuid())
+  url                   String
+  type                  String      @default("image")
+  listingId             String
+  listing               Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  order                 Int         @default(0)
+  alt                   String?
+
+  createdAt             DateTime    @default(now())
+
+  @@index([listingId])
+}
+
+model Review {
+  id                    String      @id @default(cuid())
+  rating                Int
+  text                  String?
+  reviewType            ReviewType
+  
+  authorId              String
+  author                User        @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  
+  listingId             String
+  listing               Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  bookingId             String?
+  booking               Booking?    @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([authorId])
+  @@index([listingId])
+  @@index([bookingId])
+}
+
+model Booking {
+  id                    String      @id @default(cuid())
+  listingId             String
+  listing               Listing     @relation(fields: [listingId], references: [id], onDelete: Cascade)
+  
+  providerId            String
+  provider              User        @relation("BookingProvider", fields: [providerId], references: [id], onDelete: Cascade)
+  
+  consumerId            String
+  consumer              User        @relation("BookingConsumer", fields: [consumerId], references: [id], onDelete: Cascade)
+  
+  startDate             DateTime
+  endDate               DateTime?
+  status                BookingStatus @default(PENDING)
+  
+  quantity              Int         @default(1)
+  totalPrice            Float
+  currency              String      @default("EUR")
+  
+  notes                 String?
+  reviews               Review[]
+  messages              Message[]
+  transaction           Transaction?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([listingId])
+  @@index([providerId])
+  @@index([consumerId])
+  @@index([status])
+}
+
+model Message {
+  id                    String      @id @default(cuid())
+  text                  String
+  status                MessageStatus @default(SENT)
+  
+  senderId              String
+  sender                User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  
+  recipientId           String
+  recipient             User        @relation("ReceivedMessages", fields: [recipientId], references: [id], onDelete: Cascade)
+  
+  bookingId             String?
+  booking               Booking?    @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  
+  readAt                DateTime?
+
+  createdAt             DateTime    @default(now())
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([bookingId])
+  @@index([createdAt])
+}
+
+model Report {
+  id                    String      @id @default(cuid())
+  type                  ReportType
+  title                 String
+  description           String
+  status                ReportStatus @default(OPEN)
+  
+  creatorId             String
+  creator               User        @relation("ReportCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  
+  reportedUserId        String
+  reportedUser          User        @relation("ReportedUser", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  
+  resolution            String?
+  resolvedAt            DateTime?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([creatorId])
+  @@index([reportedUserId])
+  @@index([status])
+}
+
+model Plan {
+  id                    String      @id @default(cuid())
+  type                  PlanType
+  name                  String
+  description           String?
+  price                 Float
+  currency              String      @default("EUR")
+  
+  maxListings           Int?
+  maxMessages           Int?
+  features              String[]    @default([])
+  
+  users                 User[]
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@unique([type])
+}
+
+model Transaction {
+  id                    String      @id @default(cuid())
+  amount                Float
+  currency              String      @default("EUR")
+  status                PaymentStatus @default(PENDING)
+  
+  userId                String
+  user                  User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  bookingId             String
+  booking               Booking     @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  
+  paymentMethod         String?
+  transactionId         String?     @unique
+  
+  description           String?
+  failureReason         String?
+
+  createdAt             DateTime    @default(now())
+  updatedAt             DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([bookingId])
+  @@index([status])
+}
